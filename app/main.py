@@ -1,16 +1,30 @@
-from fastapi import FastAPI, Path, Body, Header, Form, UploadFile, File, HTTPException, Depends
+from datetime import timedelta
+from fastapi import FastAPI, Path, Body, Header, Form, UploadFile, File, HTTPException, Depends,status
 from fastapi.responses import HTMLResponse
 from fastapi.encoders import jsonable_encoder
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import  OAuth2PasswordRequestForm
+from jose import JWTError, jwt, ExpiredSignatureError
 
-from app.models.model import ModelName, Item, BaseUser, UserIn, Image
-
+from app.models.model import ModelName, Item, BaseUser, UserIn, Token, TokenData, Image
+from app.auth.auth import CustomAuth
 
 app = FastAPI()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+auth_instance:CustomAuth = CustomAuth(app= app)
+
+oauth2_scheme = auth_instance.oauth2_scheme
+
+pwd_context = auth_instance.pwd_context
+
+SECRET_KEY = auth_instance.SECRET_KEY
+ALGORITHM = auth_instance.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = auth_instance.ACCESS_TOKEN_EXPIRE_MINUTES
+
 
 
 fake_item_db = [{"item_name":"foo"},{"item_name":"Bar"},{"item_name":"Baz"}]
+
+
 
 @app.get("/hello")
 def read_root():
@@ -121,6 +135,7 @@ def read_item(commons: dict = Depends(common_para)):
     return commons
 
 
+
 async def verify_token(x_token: str = Header()): 
     if x_token != "fake-super-secret-token": 
         raise HTTPException(status_code=400, detail="X-Token header invalid") 
@@ -133,6 +148,55 @@ async def verify_key(x_key: str = Header()):
 @app.get("/depend-item/", dependencies=[Depends(verify_key), Depends(verify_token)])
 def read_items():
     return [{"item": "foo", "item": "bar"}]
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, 
+        detail="Could not validate credentials", 
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token=token, key=SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data: TokenData= TokenData(username=username)
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="token has been expired")
+    except JWTError:
+        raise credentials_exception
+    user = auth_instance.get_user(auth_instance.fake_user_db, username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+def get_current_active_user(current_user: BaseUser = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inactive user")
+    return current_user
+
+@app.post("/token", response_model=Token, tags=["Token"])
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = auth_instance.authenticate_user(fake_db=auth_instance.fake_user_db, username=form_data.username, password=form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers= {"WWW-Authenticate": "bearer"},
+        )
+    access_token_expires = timedelta(minutes= ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth_instance.create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/users/me/", response_model=BaseUser, tags=["user"])
+def read_users_me(current_user: BaseUser = Depends(get_current_active_user)):
+    return current_user
+
+@app.get("/users/me/items", tags=["user"])
+def read_own_items(current_user: BaseUser = Depends(get_current_active_user)):
+    return [{"item_id": "Foo", "owner": current_user.username}]
+
 
 @app.get("/auth/", tags=["OAuth"])
 def auth(token: str = Depends(oauth2_scheme)):

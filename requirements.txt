@@ -3,4 +3,8 @@ pydantic>=1.8.0,<2.0.0
 uvicorn>=0.15.0,<0.16.0
 email-validator
 python-multipart
-passlib[bcrypt]
+
+#hashing
+passlib[bcrypt]>= 1.7.4
+#jwt
+python-jose[cryptography]

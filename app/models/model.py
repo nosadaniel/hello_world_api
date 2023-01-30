@@ -42,9 +42,18 @@ class BaseUser(BaseModel):
     username: str
     email: EmailStr
     full_name: str | None = None
+    disabled: bool
 
 class UserIn(BaseUser):
     password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: str | None = None
 
 class Offer(BaseModel):
     items: list[Item]

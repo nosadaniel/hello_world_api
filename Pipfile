@@ -4,12 +4,13 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-fastapi = ">=0.68.0,<0.89.1"
+fastapi = "<0.89.1,>=0.68.0"
 pydantic = ">=1.8.0,<2.0.0"
-uvicorn = "<0.16.0,>=0.15.0"
+uvicorn = ">=0.15.0,<0.16.0"
 python-multipart = "*"
 email-validator = "*"
-passlib = {extras = ["bcrypt"], version = "*"}
+passlib = {version = ">=1.7.4", extras = ["bcrypt"]}
+python-jose = {extras = ["cryptography"], version = "*"}
 
 [dev-packages]
 
