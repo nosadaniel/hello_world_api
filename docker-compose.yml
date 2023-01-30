@@ -1,0 +1,5 @@
+services:
+  app:
+    image: nosadaniel11/fastapi-hello-world
+    ports:
+      - 80:80
